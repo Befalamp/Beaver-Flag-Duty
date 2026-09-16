@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Flag Duty</title>
+<meta name="theme-color" content="#1E9187">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F5F0;
+    --surface: #FFFFFF;
+    --ink: #26312E;
+    --ink-soft: #5B6B67;
+    --line: #E1DED4;
+    --teal: #1E9187;
+    --teal-deep: #14685F;
+    --teal-wash: #E3F3F1;
+    --amber: #D98E2C;
+    --amber-wash: #FBEDD9;
+    --clay: #C1543A;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 28px 16px 64px;
+  }
+  .page { width: 100%; max-width: 460px; }
+
+  header { padding: 4px 4px 22px; }
+  header .crumb { font-size: 13px; color: var(--teal-deep); font-weight: 600; margin: 0 0 4px; }
+  header h1 {
+    font-family: 'Fredoka', 'Inter', sans-serif;
+    font-weight: 600; font-size: 30px; margin: 0; color: var(--ink); line-height: 1.15;
+  }
+  header p { margin: 8px 0 0; color: var(--ink-soft); font-size: 14.5px; line-height: 1.5; max-width: 36ch; }
+
+  .status { font-size: 12.5px; color: var(--ink-soft); margin: 0 4px 14px; min-height: 16px; }
+  .status.err { color: var(--clay); }
+
+  .round-strip {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 18px; display: flex; align-items: center; gap: 12px;
+  }
+  .round-strip .count { font-family: 'Fredoka', sans-serif; font-size: 20px; font-weight: 600; color: var(--teal-deep); white-space: nowrap; }
+  .round-strip .track { flex: 1; height: 8px; border-radius: 5px; background: var(--teal-wash); overflow: hidden; }
+  .round-strip .track-fill { height: 100%; background: var(--teal); border-radius: 5px; transition: width .35s ease; }
+
+  .banner {
+    background: var(--teal); color: #fff; border-radius: 14px; padding: 13px 16px;
+    font-size: 14.5px; font-weight: 500; margin-bottom: 18px; display: flex; align-items: center; gap: 8px;
+    animation: pop .4s ease;
+  }
+  @keyframes pop { 0% { transform: scale(.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+  .add-row { display: flex; gap: 8px; margin-bottom: 22px; }
+  .add-row input {
+    flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 12px; padding: 12px 14px; font-size: 15px; font-family: inherit;
+  }
+  .add-row input:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
+  .add-row button {
+    background: var(--teal); color: #fff; border: none; border-radius: 12px; padding: 0 18px;
+    font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .add-row button:disabled { opacity: .5; }
+  .add-row button:active { transform: translateY(1px); }
+  .add-row button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+
+  .empty {
+    border: 1.5px dashed var(--line); border-radius: 14px; padding: 28px 20px;
+    text-align: center; color: var(--ink-soft); font-size: 14.5px; line-height: 1.6;
+  }
+
+  .row {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 13px;
+    padding: 11px 10px 11px 14px; display: flex; align-items: center; gap: 10px;
+    transition: border-color .2s, background .2s;
+  }
+  .row[data-done="true"] { border-color: var(--teal); background: var(--teal-wash); }
+
+  .row .tick {
+    width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); background: var(--surface);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none;
+    padding: 0; color: transparent; font-size: 16px;
+  }
+  .row[data-done="true"] .tick { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .row .tick:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .row .name-block { flex: 1; min-width: 0; }
+  .row .name {
+    font-size: 15.5px; font-weight: 500; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .row .tag {
+    display: inline-block; margin-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--amber);
+    background: var(--amber-wash); border-radius: 6px; padding: 1px 6px;
+  }
+
+  .row .excuse-btn {
+    background: none; border: none; color: var(--ink-soft); font-size: 12.5px; font-weight: 500;
+    text-decoration: underline; text-decoration-color: var(--line); cursor: pointer; padding: 4px 2px;
+    font-family: inherit; flex: none; white-space: nowrap;
+  }
+  .row[data-done="true"] .excuse-btn { visibility: hidden; }
+  .row .excuse-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .row .remove-btn { background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 18px; line-height: 1; padding: 4px 6px; flex: none; }
+  .row .remove-btn:hover { color: var(--clay); }
+  .row .remove-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .footer-actions { display: flex; justify-content: center; padding-top: 4px; }
+  .reset-btn {
+    background: none; border: 1px solid var(--line); color: var(--ink-soft); border-radius: 11px;
+    padding: 10px 16px; font-size: 13.5px; font-weight: 500; font-family: inherit; cursor: pointer;
+  }
+  .reset-btn:hover { border-color: var(--clay); color: var(--clay); }
+  .reset-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .hint { text-align: center; color: var(--ink-soft); font-size: 12.5px; margin-top: 10px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <p class="crumb">Ellesmere Beavers</p>
+    <h1>Flag Duty</h1>
+    <p>Tap a Beaver when they've raised and lowered the flag. Once everyone's had a turn, the round resets on its own.</p>
+  </header>
+
+  <p class="status" id="status"></p>
+  <div id="banner-slot"></div>
+
+  <div class="round-strip">
+    <span class="count" id="round-count">0 / 0</span>
+    <div class="track"><div class="track-fill" id="round-fill" style="width:0%"></div></div>
+  </div>
+
+  <form class="add-row" id="add-form">
+    <input type="text" id="add-input" placeholder="Add a Beaver's name" autocomplete="off">
+    <button type="submit" id="add-btn">Add</button>
+  </form>
+
+  <div class="list" id="list"></div>
+
+  <div class="footer-actions">
+    <button class="reset-btn" id="reset-btn" type="button">Reset the round</button>
+  </div>
+  <p class="hint">Sat out this round? Use <em>excuse</em> on their row so the round can still complete.</p>
+</div>
+
+<script>
+(function () {
+  var FIREBASE_URL = "https://beaver-flag-duty-default-rtdb.europe-west1.firebasedatabase.app";
+  var BEAVERS_PATH = FIREBASE_URL + "/beavers.json";
+
+  var beavers = {};          // id -> { name, done, excused }
+  var lastKnownJson = null;  // for change detection on poll
+  var pollTimer = null;
+  var suppressPollRender = false;
+
+  var listEl = document.getElementById('list');
+  var statusEl = document.getElementById('status');
+  var countEl = document.getElementById('round-count');
+  var fillEl = document.getElementById('round-fill');
+  var addForm = document.getElementById('add-form');
+  var addInput = document.getElementById('add-input');
+  var addBtn = document.getElementById('add-btn');
+  var resetBtn = document.getElementById('reset-btn');
+  var bannerSlot = document.getElementById('banner-slot');
+
+  function setStatus(text, isError) {
+    statusEl.textContent = text || '';
+    statusEl.className = 'status' + (isError ? ' err' : '');
+  }
+
+  function showBanner(text, ms) {
+    bannerSlot.innerHTML = '<div class="banner">' + escapeHtml(text) + '</div>';
+    if (ms) {
+      setTimeout(function () { bannerSlot.innerHTML = ''; }, ms);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function render() {
+    var ids = Object.keys(beavers);
+    if (ids.length === 0) {
+      listEl.innerHTML = '<div class="empty">No Beavers added yet. Add your Lodge below to start tracking flag duty.</div>';
+    } else {
+      listEl.innerHTML = ids.map(function (id) {
+        var b = beavers[id];
+        var tag = b.done && b.excused ? '<span class="tag">sat out</span>' : '';
+        return (
+          '<div class="row" data-done="' + !!b.done + '" data-id="' + id + '">' +
+            '<button class="tick" data-action="tick" aria-label="Mark ' + escapeHtml(b.name) + (b.done ? ' not done' : ' done') + '">&#10003;</button>' +
+            '<div class="name-block"><div class="name">' + escapeHtml(b.name) + '</div>' + tag + '</div>' +
+            (b.done ? '' : '<button class="excuse-btn" data-action="excuse">Excuse</button>') +
+            '<button class="remove-btn" data-action="remove" aria-label="Remove ' + escapeHtml(b.name) + '">&times;</button>' +
+          '</div>'
+        );
+      }).join('');
+    }
+    var doneCount = ids.filter(function (id) { return beavers[id].done; }).length;
+    countEl.textContent = doneCount + ' / ' + ids.length;
+    fillEl.style.width = (ids.length ? (doneCount / ids.length * 100) : 0) + '%';
+  }
+
+  // ---- Firebase REST helpers ----
+  function fbGet() {
+    return fetch(BEAVERS_PATH).then(function (r) {
+      if (!r.ok) throw new Error('Load failed (' + r.status + ')');
+      return r.json();
+    });
+  }
+  function fbPost(body) {
+    return fetch(BEAVERS_PATH, { method: 'POST', body: JSON.stringify(body) }).then(function (r) {
+      if (!r.ok) throw new Error('Save failed (' + r.status + ')');
+      return r.json();
+    });
+  }
+  function fbPatch(id, patch) {
+    return fetch(FIREBASE_URL + '/beavers/' + id + '.json', { method: 'PATCH', body: JSON.stringify(patch) }).then(function (r) {
+      if (!r.ok) throw new Error('Save failed (' + r.status + ')');
+      return r.json();
+    });
+  }
+  function fbDelete(id) {
+    return fetch(FIREBASE_URL + '/beavers/' + id + '.json', { method: 'DELETE' }).then(function (r) {
+      if (!r.ok) throw new Error('Delete failed (' + r.status + ')');
+      return r.json();
+    });
+  }
+  function fbPutAll(obj) {
+    return fetch(BEAVERS_PATH, { method: 'PUT', body: JSON.stringify(obj) }).then(function (r) {
+      if (!r.ok) throw new Error('Save failed (' + r.status + ')');
+      return r.json();
+    });
+  }
+
+  function checkAutoReset() {
+    var ids = Object.keys(beavers);
+    if (ids.length > 0 && ids.every(function (id) { return beavers[id].done; })) {
+      ids.forEach(function (id) { beavers[id].done = false; beavers[id].excused = false; });
+      render();
+      showBanner("Everyone's had a turn — new round started!", 3200);
+      suppressPollRender = true;
+      fbPutAll(beavers).catch(function (e) { setStatus(e.message, true); })
+        .finally(function () { suppressPollRender = false; lastKnownJson = JSON.stringify(beavers); });
+    }
+  }
+
+  // ---- Actions ----
+  addForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = addInput.value.trim();
+    if (!name) return;
+    addBtn.disabled = true;
+    setStatus('Adding…');
+    fbPost({ name: name, done: false, excused: false }).then(function (res) {
+      beavers[res.name] = { name: name, done: false, excused: false };
+      addInput.value = '';
+      render();
+      setStatus('');
+      lastKnownJson = JSON.stringify(beavers);
+    }).catch(function (e) {
+      setStatus(e.message, true);
+    }).finally(function () {
+      addBtn.disabled = false;
+    });
+  });
+
+  listEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    var row = btn.closest('.row');
+    var id = row.getAttribute('data-id');
+    var b = beavers[id];
+    if (!b) return;
+    var action = btn.getAttribute('data-action');
+
+    if (action === 'tick') {
+      var newDone = !b.done;
+      b.done = newDone;
+      b.excused = false;
+      render();
+      fbPatch(id, { done: newDone, excused: false }).then(function () {
+        lastKnownJson = JSON.stringify(beavers);
+        checkAutoReset();
+      }).catch(function (e) { setStatus(e.message, true); });
+    } else if (action === 'excuse') {
+      b.done = true;
+      b.excused = true;
+      render();
+      fbPatch(id, { done: true, excused: true }).then(function () {
+        lastKnownJson = JSON.stringify(beavers);
+        checkAutoReset();
+      }).catch(function (e) { setStatus(e.message, true); });
+    } else if (action === 'remove') {
+      var name = b.name;
+      delete beavers[id];
+      render();
+      fbDelete(id).then(function () {
+        lastKnownJson = JSON.stringify(beavers);
+      }).catch(function (e) {
+        setStatus(e.message, true);
+      });
+    }
+  });
+
+  resetBtn.addEventListener('click', function () {
+    var ids = Object.keys(beavers);
+    if (ids.length === 0) return;
+    if (!window.confirm('Reset flag duty for everyone this round?')) return;
+    ids.forEach(function (id) { beavers[id].done = false; beavers[id].excused = false; });
+    render();
+    showBanner('Round reset.', 2400);
+    suppressPollRender = true;
+    fbPutAll(beavers).catch(function (e) { setStatus(e.message, true); })
+      .finally(function () { suppressPollRender = false; lastKnownJson = JSON.stringify(beavers); });
+  });
+
+  // ---- Load + poll for cross-device sync ----
+  function loadAndRender() {
+    fbGet().then(function (data) {
+      beavers = data || {};
+      var json = JSON.stringify(beavers);
+      if (!suppressPollRender && json !== lastKnownJson) {
+        render();
+      }
+      lastKnownJson = json;
+      setStatus('');
+    }).catch(function (e) {
+      setStatus('Offline or can\u2019t reach the database — ' + e.message, true);
+    });
+  }
+
+  loadAndRender();
+  pollTimer = setInterval(loadAndRender, 4000);
+
+  // ---- PWA service worker ----
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
