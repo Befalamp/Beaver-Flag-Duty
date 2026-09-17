@@ -109,6 +109,9 @@
     display: inline-block; margin-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--amber);
     background: var(--amber-wash); border-radius: 6px; padding: 1px 6px;
   }
+  .row .count-tag {
+    display: inline-block; margin-top: 2px; margin-right: 6px; font-size: 11.5px; font-weight: 500; color: var(--ink-soft);
+  }
 
   .row .excuse-btn {
     background: none; border: none; color: var(--ink-soft); font-size: 12.5px; font-weight: 500;
@@ -208,10 +211,12 @@
       listEl.innerHTML = ids.map(function (id) {
         var b = beavers[id];
         var tag = b.done && b.excused ? '<span class="tag">sat out</span>' : '';
+        var count = b.count || 0;
+        var countLabel = '<span class="count-tag">' + count + (count === 1 ? ' turn' : ' turns') + '</span>';
         return (
           '<div class="row" data-done="' + !!b.done + '" data-id="' + id + '">' +
             '<button class="tick" data-action="tick" aria-label="Mark ' + escapeHtml(b.name) + (b.done ? ' not done' : ' done') + '">&#10003;</button>' +
-            '<div class="name-block"><div class="name">' + escapeHtml(b.name) + '</div>' + tag + '</div>' +
+            '<div class="name-block"><div class="name">' + escapeHtml(b.name) + '</div>' + countLabel + tag + '</div>' +
             (b.done ? '' : '<button class="excuse-btn" data-action="excuse">Excuse</button>') +
             '<button class="remove-btn" data-action="remove" aria-label="Remove ' + escapeHtml(b.name) + '">&times;</button>' +
           '</div>'
@@ -274,8 +279,8 @@
     if (!name) return;
     addBtn.disabled = true;
     setStatus('Adding…');
-    fbPost({ name: name, done: false, excused: false }).then(function (res) {
-      beavers[res.name] = { name: name, done: false, excused: false };
+    fbPost({ name: name, done: false, excused: false, count: 0 }).then(function (res) {
+      beavers[res.name] = { name: name, done: false, excused: false, count: 0 };
       addInput.value = '';
       render();
       setStatus('');
@@ -298,10 +303,15 @@
 
     if (action === 'tick') {
       var newDone = !b.done;
+      if (!newDone) {
+        if (!window.confirm('Mark ' + b.name + ' as not done?')) return;
+      }
       b.done = newDone;
       b.excused = false;
+      var newCount = Math.max(0, (b.count || 0) + (newDone ? 1 : -1));
+      b.count = newCount;
       render();
-      fbPatch(id, { done: newDone, excused: false }).then(function () {
+      fbPatch(id, { done: newDone, excused: false, count: newCount }).then(function () {
         lastKnownJson = JSON.stringify(beavers);
         checkAutoReset();
       }).catch(function (e) { setStatus(e.message, true); });
@@ -315,6 +325,7 @@
       }).catch(function (e) { setStatus(e.message, true); });
     } else if (action === 'remove') {
       var name = b.name;
+      if (!window.confirm('Remove ' + name + ' from the list?')) return;
       delete beavers[id];
       render();
       fbDelete(id).then(function () {
