@@ -1,7 +1,5 @@
-const CACHE_NAME = 'flag-duty-v2';
+const CACHE_NAME = 'flag-duty-v4';
 const CACHE_FILES = [
-  './',
-  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -26,13 +24,21 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never cache Firebase database calls — always go to the network.
-  if (url.hostname.endsWith('firebasedatabase.app')) {
+  // Only handle same-origin GET requests (leave Firebase, sign-in and
+  // font requests entirely alone).
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) {
     return;
   }
 
-  // Network-first: always try for the latest version; fall back to the
-  // cached copy only when offline. Avoids ever getting stuck on stale code.
+  // Never let the service worker handle the page itself — always let the
+  // browser fetch it fresh, so code updates show up immediately with no
+  // waiting on the service worker's own update cycle.
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+    return;
+  }
+
+  // Network-first for everything else (manifest, icons); fall back to
+  // cache only when offline.
   event.respondWith(
     fetch(event.request).then((response) => {
       const copy = response.clone();

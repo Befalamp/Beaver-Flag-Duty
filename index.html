@@ -46,6 +46,15 @@
   }
   header p { margin: 8px 0 0; color: var(--ink-soft); font-size: 14.5px; line-height: 1.5; max-width: 36ch; }
 
+  .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .tab-btn {
+    flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+    border-radius: 11px; padding: 10px 0; font-size: 14px; font-weight: 600; font-family: inherit;
+    cursor: pointer;
+  }
+  .tab-btn[data-active="true"] { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .tab-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
   .status { font-size: 12.5px; color: var(--ink-soft); margin: 0 4px 14px; min-height: 16px; }
   .status.err { color: var(--clay); }
 
@@ -134,15 +143,51 @@
   .reset-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
   .hint { text-align: center; color: var(--ink-soft); font-size: 12.5px; margin-top: 10px; line-height: 1.5; }
+
+  [hidden] { display: none !important; }
+  .login { width: 100%; max-width: 460px; padding-top: 48px; }
+  .login h1 { font-family: 'Fredoka', 'Inter', sans-serif; font-weight: 600; font-size: 30px; margin: 0 0 6px; }
+  .login p { color: var(--ink-soft); font-size: 14.5px; margin: 0 0 22px; }
+  .login form { display: flex; flex-direction: column; gap: 10px; }
+  .login input {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 12px; padding: 13px 14px; font-size: 16px; font-family: inherit;
+  }
+  .login input:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
+  .login button {
+    background: var(--teal); color: #fff; border: none; border-radius: 12px; padding: 13px;
+    font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .login button:disabled { opacity: .5; }
+  .link-btn {
+    background: none; border: none; color: var(--ink-soft); font-size: 12.5px; font-family: inherit;
+    text-decoration: underline; text-decoration-color: var(--line); cursor: pointer; padding: 4px;
+  }
 </style>
 </head>
 <body>
-<div class="page">
+<div class="login" id="login" hidden>
+  <h1>Flag Duty</h1>
+  <p>Sign in to continue.</p>
+  <form id="login-form">
+    <input type="email" id="login-email" placeholder="Email" autocomplete="username" required>
+    <input type="password" id="login-pw" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit" id="login-btn">Sign in</button>
+  </form>
+  <p class="status err" id="login-err" style="margin:12px 0 0"></p>
+</div>
+
+<div class="page" id="app" hidden>
   <header>
-    <p class="crumb">Ellesmere Beavers</p>
+    <p class="crumb" id="crumb">Ellesmere Beavers</p>
     <h1>Flag Duty</h1>
-    <p>Tap a Beaver when they've raised and lowered the flag. Once everyone's had a turn, the round resets on its own.</p>
+    <p id="subtitle">Tap a Beaver when they've raised and lowered the flag. Once everyone's had a turn, the round resets on its own.</p>
   </header>
+
+  <div class="tabs" id="tabs">
+    <button class="tab-btn" data-section="beavers" type="button">Beavers</button>
+    <button class="tab-btn" data-section="scouts" type="button">Scouts</button>
+  </div>
 
   <p class="status" id="status"></p>
   <div id="banner-slot"></div>
@@ -163,14 +208,20 @@
     <button class="reset-btn" id="reset-btn" type="button">Reset the round</button>
   </div>
   <p class="hint">Sat out this round? Use <em>excuse</em> on their row so the round can still complete.</p>
+  <p class="hint"><button class="link-btn" id="signout-btn" type="button">Sign out on this device</button></p>
 </div>
 
 <script>
 (function () {
   var FIREBASE_URL = "https://beaver-flag-duty-default-rtdb.europe-west1.firebasedatabase.app";
-  var BEAVERS_PATH = FIREBASE_URL + "/beavers.json";
+  var SECTIONS = {
+    beavers: { singular: 'Beaver', plural: 'Beavers', crumb: 'Ellesmere Beavers', groupNoun: 'Lodge' },
+    scouts:  { singular: 'Scout',  plural: 'Scouts',  crumb: 'Ellesmere Scouts',  groupNoun: 'Patrol' }
+  };
+  var currentSection = (localStorage.getItem('flagduty-section') in SECTIONS)
+    ? localStorage.getItem('flagduty-section') : 'beavers';
 
-  var beavers = {};          // id -> { name, done, excused }
+  var people = {};           // id -> { name, done, excused, count }
   var lastKnownJson = null;  // for change detection on poll
   var pollTimer = null;
   var suppressPollRender = false;
@@ -184,6 +235,13 @@
   var addBtn = document.getElementById('add-btn');
   var resetBtn = document.getElementById('reset-btn');
   var bannerSlot = document.getElementById('banner-slot');
+  var crumbEl = document.getElementById('crumb');
+  var subtitleEl = document.getElementById('subtitle');
+  var tabsEl = document.getElementById('tabs');
+
+  function sec() { return SECTIONS[currentSection]; }
+  function peoplePath() { return FIREBASE_URL + '/' + currentSection + '.json'; }
+  function itemPath(id) { return FIREBASE_URL + '/' + currentSection + '/' + id + '.json'; }
 
   function setStatus(text, isError) {
     statusEl.textContent = text || '';
@@ -203,74 +261,203 @@
     });
   }
 
+  function updateCopyForSection() {
+    crumbEl.textContent = sec().crumb;
+    subtitleEl.textContent = "Tap a " + sec().singular + " when they've raised and lowered the flag. Once everyone's had a turn, the round resets on its own.";
+    addInput.placeholder = "Add a " + sec().singular + "'s name";
+    Array.prototype.forEach.call(tabsEl.querySelectorAll('.tab-btn'), function (btn) {
+      btn.setAttribute('data-active', btn.getAttribute('data-section') === currentSection);
+    });
+  }
+
   function render() {
-    var ids = Object.keys(beavers);
+    var ids = Object.keys(people);
     if (ids.length === 0) {
-      listEl.innerHTML = '<div class="empty">No Beavers added yet. Add your Lodge below to start tracking flag duty.</div>';
+      listEl.innerHTML = '<div class="empty">No ' + sec().plural + ' added yet. Add your ' + sec().groupNoun + ' below to start tracking flag duty.</div>';
     } else {
       listEl.innerHTML = ids.map(function (id) {
-        var b = beavers[id];
-        var tag = b.done && b.excused ? '<span class="tag">sat out</span>' : '';
-        var count = b.count || 0;
+        var p = people[id];
+        var tag = p.done && p.excused ? '<span class="tag">sat out</span>' : '';
+        var count = p.count || 0;
         var countLabel = '<span class="count-tag">' + count + (count === 1 ? ' turn' : ' turns') + '</span>';
         return (
-          '<div class="row" data-done="' + !!b.done + '" data-id="' + id + '">' +
-            '<button class="tick" data-action="tick" aria-label="Mark ' + escapeHtml(b.name) + (b.done ? ' not done' : ' done') + '">&#10003;</button>' +
-            '<div class="name-block"><div class="name">' + escapeHtml(b.name) + '</div>' + countLabel + tag + '</div>' +
-            (b.done ? '' : '<button class="excuse-btn" data-action="excuse">Excuse</button>') +
-            '<button class="remove-btn" data-action="remove" aria-label="Remove ' + escapeHtml(b.name) + '">&times;</button>' +
+          '<div class="row" data-done="' + !!p.done + '" data-id="' + id + '">' +
+            '<button class="tick" data-action="tick" aria-label="Mark ' + escapeHtml(p.name) + (p.done ? ' not done' : ' done') + '">&#10003;</button>' +
+            '<div class="name-block"><div class="name">' + escapeHtml(p.name) + '</div>' + countLabel + tag + '</div>' +
+            (p.done ? '' : '<button class="excuse-btn" data-action="excuse">Excuse</button>') +
+            '<button class="remove-btn" data-action="remove" aria-label="Remove ' + escapeHtml(p.name) + '">&times;</button>' +
           '</div>'
         );
       }).join('');
     }
-    var doneCount = ids.filter(function (id) { return beavers[id].done; }).length;
+    var doneCount = ids.filter(function (id) { return people[id].done; }).length;
     countEl.textContent = doneCount + ' / ' + ids.length;
     fillEl.style.width = (ids.length ? (doneCount / ids.length * 100) : 0) + '%';
   }
 
+  // ---- Auth (Firebase email/password via REST, no SDK) ----
+  var API_KEY = "AIzaSyCJ0LuR-Y94Ucoav-HUl9m72dqG5_oHiWg";
+  var AUTH_STORE = 'flagduty-auth';
+  var auth = null; // { idToken, refreshToken, expiresAt }
+  var appEl = document.getElementById('app');
+  var loginEl = document.getElementById('login');
+  var loginErr = document.getElementById('login-err');
+
+  function loadAuth() {
+    try { auth = JSON.parse(localStorage.getItem(AUTH_STORE)); } catch (e) { auth = null; }
+    if (auth && !auth.refreshToken) auth = null;
+  }
+  function saveAuth(idToken, refreshToken, expiresInSec) {
+    auth = { idToken: idToken, refreshToken: refreshToken, expiresAt: Date.now() + (parseInt(expiresInSec, 10) - 60) * 1000 };
+    localStorage.setItem(AUTH_STORE, JSON.stringify(auth));
+  }
+  function authError(msg) { var e = new Error(msg); e.authFailed = true; return e; }
+
+  function friendlyAuthMessage(d) {
+    var m = (d && d.error && d.error.message) || '';
+    if (m.indexOf('INVALID_LOGIN_CREDENTIALS') === 0 || m.indexOf('INVALID_PASSWORD') === 0 || m.indexOf('EMAIL_NOT_FOUND') === 0) return 'Wrong email or password.';
+    if (m.indexOf('TOO_MANY_ATTEMPTS') === 0) return 'Too many attempts \u2014 wait a few minutes and try again.';
+    if (m.indexOf('USER_DISABLED') === 0) return 'This account has been disabled.';
+    return 'Couldn\u2019t sign in (' + (m || 'unknown error') + ').';
+  }
+  function signInRequest(email, pw) {
+    return fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + API_KEY, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: pw, returnSecureToken: true })
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (!r.ok) throw authError(friendlyAuthMessage(d));
+        return d;
+      });
+    });
+  }
+  function refreshSession() {
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + API_KEY, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(auth.refreshToken)
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (!r.ok) throw authError('Session expired');
+        saveAuth(d.id_token, d.refresh_token, d.expires_in);
+      });
+    });
+  }
+  function getToken() {
+    if (!auth) return Promise.reject(authError('Signed out'));
+    if (Date.now() < auth.expiresAt) return Promise.resolve(auth.idToken);
+    return refreshSession().then(function () { return auth.idToken; });
+  }
+  function authedFetch(url, opts) {
+    return getToken().then(function (tok) {
+      return fetch(url + (url.indexOf('?') > -1 ? '&' : '?') + 'auth=' + encodeURIComponent(tok), opts);
+    }).then(function (r) {
+      if (r.status === 401 || r.status === 403) throw authError('Session expired');
+      return r;
+    }).catch(function (e) {
+      if (e.authFailed) signOut('Please sign in again.');
+      throw e;
+    });
+  }
+
+  function showLogin(msg) {
+    appEl.hidden = true;
+    loginEl.hidden = false;
+    loginErr.textContent = msg || '';
+  }
+  function startApp() {
+    loginEl.hidden = true;
+    appEl.hidden = false;
+    render();
+    loadAndRender();
+    if (!pollTimer) pollTimer = setInterval(loadAndRender, 4000);
+  }
+  function signOut(msg) {
+    auth = null;
+    localStorage.removeItem(AUTH_STORE);
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    people = {};
+    lastKnownJson = null;
+    showLogin(msg);
+  }
+
+  document.getElementById('login-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var btn = document.getElementById('login-btn');
+    var pwEl = document.getElementById('login-pw');
+    btn.disabled = true;
+    loginErr.textContent = '';
+    signInRequest(document.getElementById('login-email').value.trim(), pwEl.value).then(function (d) {
+      saveAuth(d.idToken, d.refreshToken, d.expiresIn);
+      pwEl.value = '';
+      startApp();
+    }).catch(function (err) {
+      loginErr.textContent = err.authFailed ? err.message : 'Couldn\u2019t connect \u2014 check your signal and try again.';
+    }).finally(function () { btn.disabled = false; });
+  });
+  document.getElementById('signout-btn').addEventListener('click', function () {
+    if (window.confirm('Sign out on this device?')) signOut('');
+  });
+
   // ---- Firebase REST helpers ----
   function fbGet() {
-    return fetch(BEAVERS_PATH).then(function (r) {
+    return authedFetch(peoplePath()).then(function (r) {
       if (!r.ok) throw new Error('Load failed (' + r.status + ')');
       return r.json();
     });
   }
   function fbPost(body) {
-    return fetch(BEAVERS_PATH, { method: 'POST', body: JSON.stringify(body) }).then(function (r) {
+    return authedFetch(peoplePath(), { method: 'POST', body: JSON.stringify(body) }).then(function (r) {
       if (!r.ok) throw new Error('Save failed (' + r.status + ')');
       return r.json();
     });
   }
   function fbPatch(id, patch) {
-    return fetch(FIREBASE_URL + '/beavers/' + id + '.json', { method: 'PATCH', body: JSON.stringify(patch) }).then(function (r) {
+    return authedFetch(itemPath(id), { method: 'PATCH', body: JSON.stringify(patch) }).then(function (r) {
       if (!r.ok) throw new Error('Save failed (' + r.status + ')');
       return r.json();
     });
   }
   function fbDelete(id) {
-    return fetch(FIREBASE_URL + '/beavers/' + id + '.json', { method: 'DELETE' }).then(function (r) {
+    return authedFetch(itemPath(id), { method: 'DELETE' }).then(function (r) {
       if (!r.ok) throw new Error('Delete failed (' + r.status + ')');
       return r.json();
     });
   }
   function fbPutAll(obj) {
-    return fetch(BEAVERS_PATH, { method: 'PUT', body: JSON.stringify(obj) }).then(function (r) {
+    return authedFetch(peoplePath(), { method: 'PUT', body: JSON.stringify(obj) }).then(function (r) {
       if (!r.ok) throw new Error('Save failed (' + r.status + ')');
       return r.json();
     });
   }
 
   function checkAutoReset() {
-    var ids = Object.keys(beavers);
-    if (ids.length > 0 && ids.every(function (id) { return beavers[id].done; })) {
-      ids.forEach(function (id) { beavers[id].done = false; beavers[id].excused = false; });
+    var ids = Object.keys(people);
+    if (ids.length > 0 && ids.every(function (id) { return people[id].done; })) {
+      ids.forEach(function (id) { people[id].done = false; people[id].excused = false; });
       render();
       showBanner("Everyone's had a turn — new round started!", 3200);
       suppressPollRender = true;
-      fbPutAll(beavers).catch(function (e) { setStatus(e.message, true); })
-        .finally(function () { suppressPollRender = false; lastKnownJson = JSON.stringify(beavers); });
+      fbPutAll(people).catch(function (e) { setStatus(e.message, true); })
+        .finally(function () { suppressPollRender = false; lastKnownJson = JSON.stringify(people); });
     }
   }
+
+  // ---- Section switching ----
+  tabsEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-section]');
+    if (!btn) return;
+    var newSection = btn.getAttribute('data-section');
+    if (newSection === currentSection) return;
+    currentSection = newSection;
+    localStorage.setItem('flagduty-section', currentSection);
+    people = {};
+    lastKnownJson = null;
+    bannerSlot.innerHTML = '';
+    updateCopyForSection();
+    render();
+    setStatus('Loading…');
+    loadAndRender();
+  });
 
   // ---- Actions ----
   addForm.addEventListener('submit', function (e) {
@@ -280,11 +467,11 @@
     addBtn.disabled = true;
     setStatus('Adding…');
     fbPost({ name: name, done: false, excused: false, count: 0 }).then(function (res) {
-      beavers[res.name] = { name: name, done: false, excused: false, count: 0 };
+      people[res.name] = { name: name, done: false, excused: false, count: 0 };
       addInput.value = '';
       render();
       setStatus('');
-      lastKnownJson = JSON.stringify(beavers);
+      lastKnownJson = JSON.stringify(people);
     }).catch(function (e) {
       setStatus(e.message, true);
     }).finally(function () {
@@ -297,39 +484,39 @@
     if (!btn) return;
     var row = btn.closest('.row');
     var id = row.getAttribute('data-id');
-    var b = beavers[id];
-    if (!b) return;
+    var p = people[id];
+    if (!p) return;
     var action = btn.getAttribute('data-action');
 
     if (action === 'tick') {
-      var newDone = !b.done;
+      var newDone = !p.done;
       if (!newDone) {
-        if (!window.confirm('Mark ' + b.name + ' as not done?')) return;
+        if (!window.confirm('Mark ' + p.name + ' as not done?')) return;
       }
-      b.done = newDone;
-      b.excused = false;
-      var newCount = Math.max(0, (b.count || 0) + (newDone ? 1 : -1));
-      b.count = newCount;
+      p.done = newDone;
+      p.excused = false;
+      var newCount = Math.max(0, (p.count || 0) + (newDone ? 1 : -1));
+      p.count = newCount;
       render();
       fbPatch(id, { done: newDone, excused: false, count: newCount }).then(function () {
-        lastKnownJson = JSON.stringify(beavers);
+        lastKnownJson = JSON.stringify(people);
         checkAutoReset();
       }).catch(function (e) { setStatus(e.message, true); });
     } else if (action === 'excuse') {
-      b.done = true;
-      b.excused = true;
+      p.done = true;
+      p.excused = true;
       render();
       fbPatch(id, { done: true, excused: true }).then(function () {
-        lastKnownJson = JSON.stringify(beavers);
+        lastKnownJson = JSON.stringify(people);
         checkAutoReset();
       }).catch(function (e) { setStatus(e.message, true); });
     } else if (action === 'remove') {
-      var name = b.name;
+      var name = p.name;
       if (!window.confirm('Remove ' + name + ' from the list?')) return;
-      delete beavers[id];
+      delete people[id];
       render();
       fbDelete(id).then(function () {
-        lastKnownJson = JSON.stringify(beavers);
+        lastKnownJson = JSON.stringify(people);
       }).catch(function (e) {
         setStatus(e.message, true);
       });
@@ -337,34 +524,39 @@
   });
 
   resetBtn.addEventListener('click', function () {
-    var ids = Object.keys(beavers);
+    var ids = Object.keys(people);
     if (ids.length === 0) return;
     if (!window.confirm('Reset flag duty for everyone this round?')) return;
-    ids.forEach(function (id) { beavers[id].done = false; beavers[id].excused = false; });
+    ids.forEach(function (id) { people[id].done = false; people[id].excused = false; });
     render();
     showBanner('Round reset.', 2400);
     suppressPollRender = true;
-    fbPutAll(beavers).catch(function (e) { setStatus(e.message, true); })
-      .finally(function () { suppressPollRender = false; lastKnownJson = JSON.stringify(beavers); });
+    fbPutAll(people).catch(function (e) { setStatus(e.message, true); })
+      .finally(function () { suppressPollRender = false; lastKnownJson = JSON.stringify(people); });
   });
 
   // ---- Load + poll for cross-device sync ----
   function loadAndRender() {
+    var sectionAtRequest = currentSection;
     fbGet().then(function (data) {
-      beavers = data || {};
-      var json = JSON.stringify(beavers);
+      if (sectionAtRequest !== currentSection) return; // switched tabs mid-request
+      people = data || {};
+      var json = JSON.stringify(people);
       if (!suppressPollRender && json !== lastKnownJson) {
         render();
       }
       lastKnownJson = json;
       setStatus('');
     }).catch(function (e) {
+      if (sectionAtRequest !== currentSection) return;
+      if (e.authFailed) return;
       setStatus('Offline or can\u2019t reach the database — ' + e.message, true);
     });
   }
 
-  loadAndRender();
-  pollTimer = setInterval(loadAndRender, 4000);
+  updateCopyForSection();
+  loadAuth();
+  if (auth) startApp(); else showLogin('');
 
   // ---- PWA service worker ----
   if ('serviceWorker' in navigator) {
