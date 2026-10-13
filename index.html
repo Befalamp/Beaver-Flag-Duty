@@ -186,6 +186,7 @@
 
   <div class="tabs" id="tabs">
     <button class="tab-btn" data-section="beavers" type="button">Beavers</button>
+    <button class="tab-btn" data-section="cubs" type="button">Cubs</button>
     <button class="tab-btn" data-section="scouts" type="button">Scouts</button>
   </div>
 
@@ -216,6 +217,7 @@
   var FIREBASE_URL = "https://beaver-flag-duty-default-rtdb.europe-west1.firebasedatabase.app";
   var SECTIONS = {
     beavers: { singular: 'Beaver', plural: 'Beavers', crumb: 'Ellesmere Beavers', groupNoun: 'Lodge' },
+    cubs:    { singular: 'Cub',    plural: 'Cubs',    crumb: 'Ellesmere Cubs',    groupNoun: 'Six' },
     scouts:  { singular: 'Scout',  plural: 'Scouts',  crumb: 'Ellesmere Scouts',  groupNoun: 'Patrol' }
   };
   var currentSection = (localStorage.getItem('flagduty-section') in SECTIONS)
